@@ -1,102 +1,107 @@
-# Wazuh SIEM Home Lab
+# Wazuh SIEM Home Lab: Endpoint Monitoring & Telemetry Ingestion
 
-## Overview
+## 📌 Project Overview
+This project documents the end-to-end deployment of an enterprise-grade blue-team home lab using **Wazuh SIEM** inside Oracle VirtualBox. The objective of this project was to establish a central security monitoring framework, onboard a Windows target endpoint, enrich local logging via Microsoft Sysmon, and validate live log ingestion and parsing within the threat hunting dashboard.
 
-This project documents the setup of a beginner-friendly blue-team home lab using Wazuh SIEM on Ubuntu Server inside Oracle VirtualBox.
+---
 
-The goal was to build a working SIEM foundation for SOC analyst practice, endpoint monitoring, alert review, and future detection engineering exercises.
+## 💻 Lab Environment & Architecture
 
-## Lab Environment
+| Component | Technical Details |
+| :--- | :--- |
+| **Host System** | Windows 11 |
+| **Hypervisor** | Oracle VirtualBox |
+| **SIEM Platform** | Wazuh 4.14.5 Stack (Manager, Indexer, Dashboard, Filebeat) |
+| **SIEM Server OS** | Ubuntu Server 24.04 LTS |
+| **Target Endpoint** | Windows 11 Pro Enterprise Sandbox (`WIN-ENDPOINT`) |
+| **Network Layout** | VirtualBox Isolated Subnet with Host Port Forwarding |
 
-| Component | Details |
-| --- | --- |
-| Host OS | Windows 11 |
-| Hypervisor | Oracle VirtualBox |
-| SIEM | Wazuh 4.14.x |
-| Server OS | Ubuntu Server 24.04 LTS |
-| VM Memory | Around 6 GB |
-| VM CPU | 3 cores |
-| VM Disk | Rebuilt with larger root partition after LVM sizing issue |
-| Dashboard Access | Browser access through VirtualBox NAT port forwarding |
+---
 
-## What I Built
+## 🛠️ Implementation Milestones
 
-- Installed Ubuntu Server 24.04 LTS in VirtualBox.
-- Configured VM resources for Wazuh.
-- Installed Wazuh Manager, Indexer, Filebeat, and Dashboard using the Wazuh installation assistant.
-- Rebuilt the VM after discovering the first install only allocated around 24 GB to `/`.
-- Confirmed the improved setup had around 68 GB available.
-- Used VirtualBox port forwarding to access the Wazuh dashboard from the Windows host.
-- Logged into the Wazuh dashboard and verified the overview screen loaded.
+### Phase 1: SIEM Core Infrastructure Deployed
+* **OS Provisioning:** Built an optimized instance running Ubuntu Server 24.04 LTS.
+* **Stack Automated Setup:** Configured the core Wazuh manager component architecture using the automated installation assistant.
 
-## Troubleshooting Notes
+### Phase 2: Windows Endpoint Onboarding & Subnet Realignment
+* **Agent Setup:** Installed the native Wazuh Windows agent and verified its persistent background state (`WazuhSvc`).
+* **Subnet Mapping:** Handled cross-VM network isolation hurdles to guarantee reliable host-to-guest and guest-to-guest communication channels, updating the endpoint status to active.
 
-### Issue 1: Unsupported Ubuntu Version
+### Phase 3: High-Fidelity Logging via Microsoft Sysmon ✅
+* **Telemetry Collection:** Deployed Microsoft Sysmon on the endpoint to acquire deep system execution context (Process creation, network handshakes).
+* **Agent Integration:** Injected precise configuration parameters into the endpoint's `ossec.conf` file to ingest operational telemetry directly into the SIEM database.
+* **Ingestion Success:** Successfully verified over 126 parsed event hits directly inside the main console workspace.
 
-The first attempt used Ubuntu 26.04, which caused Wazuh compatibility warnings. The fix was to reinstall with Ubuntu Server 24.04 LTS.
+---
 
-### Issue 2: Root Partition Too Small
+## 🔍 Engineering & Troubleshooting Log
 
-The first Ubuntu install used LVM and allocated only about 24 GB to `/`, even though the virtual disk was larger. Wazuh Dashboard installation failed because the system did not have enough usable root space.
+### 1. Operating System Compatibility Adjustments
+* **Issue:** The initial deployment utilized Ubuntu 26.04, triggering severe compatibility flags and package architecture compilation drops during stack installation.
+* **Resolution:** Re-provisioned the hypervisor space using **Ubuntu Server 24.04 LTS**, aligning completely with the stable production validation path.
 
-Fix:
+### 2. Overcoming Restrictive Storage Bounds (LVM)
+* **Issue:** Default LVM storage parameters bounded the root filesystem (`/`) to an arbitrary ~24 GB layout despite provisioned virtual disk sizing. The storage-intensive indexer failed validation loops immediately.
+* **Resolution:** Adjusted partition variables during OS installation to unlock a flat **68 GB** of unconstrained storage directly available on the root path.
 
-- Reinstalled Ubuntu.
-- Used a larger dynamically allocated virtual disk.
-- Avoided the LVM layout for the beginner lab.
-- Confirmed available disk space before reinstalling Wazuh.
+### 3. "No Bootable Medium Found" VirtualBox Lock
+* **Issue:** Target virtual instances failed setup loops, throwing physical boot device attachment errors.
+* **Resolution:** Opened VM Settings ➡️ Storage, and manually mapped the official Microsoft assessment ISO directly to the virtual optical IDE/SATA controllers.
 
-### Issue 3: Accessing Dashboard from Windows
+### 4. Resolving Network Isolation & APIPA IP Address Loop
+* **Issue:** The target Windows machine initially loaded with an unroutable APIPA address, rendering it completely blind to the Wazuh Manager sitting at `10.0.2.15`. 
+* **Resolution:** Configured unified VirtualBox Network assignments matching both host nodes. The Windows endpoint successfully acquired a valid lease at `10.0.2.12`, establishing clean data communication routes inside the internal subnet workspace.
 
-The Wazuh server used VirtualBox NAT networking. The fix was to use host port forwarding:
+### 5. PowerShell `CommandNotFoundException` on Sysmon Deployment
+* **Issue:** Invoking the installation script via standard administrative prompts returned execution exceptions due to systemic pathing errors.
+* **Resolution:** Explicitly modified active directory parameters to point directly to the user-space destination download folder (`C:\Users\kevin\Downloads\Sysmon`) before establishing execution parameters.
 
-| Host | Guest |
-| --- | --- |
-| `127.0.0.1:8443` | `10.0.2.15:443` |
+### 6. Verification of the Local Sysmon Engine Name
+* **Issue:** Running `Get-Service Sysmon64` or `Get-Service Sysmon` initially failed with an `ObjectNotFoundException`, raising concerns about whether the engine was loaded properly.
+* **Resolution:** Confirmed the execution by directly querying the local Windows Event Log provider using `Get-WinEvent -Logname "Microsoft-Windows-Sysmon/Operational" -MaxEvents 3`. The prompt returned clear, live event data (Event ID 1: Process Creation; Event ID 5: Process Termination).
 
-After this, the dashboard was reachable from the Windows browser at:
+### 7. Pipeline Delay Handling (No Results Match Search Criteria)
+* **Issue:** Even though Sysmon logs were actively printing to the local Event Viewer engine, adding parameters to the agent's `ossec.conf` configuration profile did not immediately display data within the centralized SIEM interface.
+* **Resolution:** Executed administrative `Restart-Service WazuhSvc` triggers to force immediate runtime reloads. Once configuration blocks successfully bound to the agent, the event processing pipelines stabilized completely.
 
-```text
-https://127.0.0.1:8443
-```
+---
 
-## Evidence Captured
+## 📸 Technical Artifacts & Evidence
 
-### Wazuh Loading Screen
+### Milestone 1: Windows Endpoint Onboarding
+Validation that network adjustments stabilized routing paths across the environment to pull core asset inventory:
 
-![Wazuh loading screen](screenshots/wazuh-loading.png)
+* **Active Agent Onboarding Confirmation:**
+  ![Active Agent Onboarded](screenshots/wazuh_agent_active_graph.png)
+* **Wazuh Agent Event Logs:**
+  ![Agent Logs](screenshots/wazuh_agent_event_logs.png)
 
-### Wazuh Login Page
+### Milestone 2: Sysmon Local Verification & Troubleshooting
+Tracking down local execution parameters before updating configuration profiles:
 
-![Wazuh login page](screenshots/wazuh-login.png)
+* **Sysmon Local Verification and Agent Management:**
+  ![Local Verification](screenshots/sysmon_local_verification.png)
+* **Sysmon Path/Service Discovery Error:**
+  ![Service Error](screenshots/sysmon_service_error.png)
 
-### Wazuh Overview Dashboard
+### Milestone 3: Telemetry Collection & Parsing Success
+Evidence of targeted local log capture profiles properly forwarding logs to the SIEM stack:
 
-![Wazuh overview dashboard](screenshots/wazuh-overview-dashboard.png)
+* **Wazuh Configuration Block Injected (`ossec.conf`):**
+  ![Wazuh Configuration Adjustment](screenshots/ossec_configuration_edit.png)
+* **Initial Empty Pipeline State (Pre-Service Restart):**
+  ![No Results Initial Error](screenshots/sysmon_no_results_error.png)
+* **Live Telemetry Stream Active (126 Hits Verified):**
+  ![Active Ingestion Graph](screenshots/sysmon_active_ingestion_graph.png)
+* **Parsed Telemetry View (PowerShell Events Loaded):**
+  ![Sysmon Event Logs Ingested](screenshots/sysmon_parsed_telemetry.png)
 
-### VirtualBox Network Review
+The ingestion panel successfully captures events via the `data.win.system.providerName` field tracking live PowerShell sessions and internal administrative changes.
 
-This screenshot documents the Windows Server VM network review while preparing for future Wazuh agent deployment.
+---
 
-![VirtualBox Windows Server network settings](screenshots/virtualbox-windows-network.png)
-
-## Security Note
-
-Administrative credentials and password files are intentionally excluded from this repository. Screenshots should be reviewed and redacted before public sharing.
-
-## Next Steps
-
-- Add a Windows Server 2019 endpoint as a Wazuh agent.
-- Install Sysmon on the Windows endpoint.
-- Collect Windows Security logs and Sysmon telemetry.
-- Simulate safe events such as failed logins and PowerShell execution.
-- Create detection notes and incident-style writeups.
-
-## Skills Demonstrated
-
-- Linux server administration
-- VirtualBox VM setup
-- SIEM deployment
-- Basic networking and port forwarding
-- Troubleshooting installation failures
-- Security lab documentation
+## 🚀 Future Milestones
+1. **Log Filtering Optimization:** Deploy structured rule sets (e.g., SwiftOnSecurity profile mappings) to filter noisy administrative alerts.
+2. **Custom Detection Rules:** Write tailored manager-side XML signatures to flag anomalous activity like lateral network reconnaissance.
+3. **Attack Emulation Playbooks:** Run controlled adversary test routines (e.g., Atomic Red Team modules) to document practical alert matching rules.
